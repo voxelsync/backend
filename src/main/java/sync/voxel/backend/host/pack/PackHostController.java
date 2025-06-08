@@ -49,7 +49,7 @@ public class PackHostController {
             return ResponseEntity.badRequest().body("Missing parameters");
         }
 
-        String url = hostManager.handlePackUpload(hostKey, identifier, base64Pack);
+        String url = hostManager.uploadPacketToGitHub(hostKey, identifier, base64Pack);
         if (url == null) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Identifier mismatch");
         }

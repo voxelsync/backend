@@ -1,8 +1,9 @@
 package sync.voxel.backend.host.pack;
 
-import org.kohsuke.github.GHRelease;
-import org.kohsuke.github.GHRepository;
-import org.kohsuke.github.GitHub;
+import io.github.cdimascio.dotenv.Dotenv;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
+import org.kohsuke.github.*;
 import sync.voxel.backend.VoxelApp;
 
 import java.io.ByteArrayInputStream;
@@ -11,30 +12,38 @@ import java.util.Base64;
 
 public class GitHubExecutor {
 
-    private static final String REPO = "";
-    public static String uploadToGithub(String mac, String base64Pack) {
+    private static final String REPO_NAME = "voxelsync/host";
+    private static String GITHUB_TOKEN = "";
+    private static GHRepository repo;
+
+    public static String uploadToGithub(String identifier, String base64Pack) {
+
+        Dotenv dotenv = Dotenv.load();
+
+        GITHUB_TOKEN = dotenv.get("GITHUB_TOKEN");
+
         if (GITHUB_TOKEN == null || GITHUB_TOKEN.isEmpty()) {
             VoxelApp.LOGGER.error("GitHub token is not configured!");
             return "GitHub token not configured";
         }
 
-        VoxelApp.LOGGER.info("Starting GitHub upload for MAC: {}", mac);
+        VoxelApp.LOGGER.info("Starting GitHub upload for identifier: {}", identifier);
 
         try {
             GitHub github = connectToGitHub();
-            GHRepository repo = getRepository(github);
+            getRepository(github);
             byte[] data = decodeBase64Pack(base64Pack);
 
-            String tag = createTagName(mac);
-            deleteExistingReleaseIfExists(repo, tag);
+            String tag = createTagName(identifier);
+            deleteExistingReleaseIfExists(tag);
 
-            GHRelease release = createNewRelease(repo, tag, mac);
-            uploadAssetToRelease(release, mac, data);
+            GHRelease release = createNewRelease(tag, identifier);
+            uploadAssetToRelease(release, identifier, data);
 
-            return findAssetDownloadUrl(release, mac);
+            return findAssetDownloadUrl(release, identifier);
 
         } catch (Exception e) {
-            VoxelApp.LOGGER.error("GitHub upload failed for MAC: {}", mac, e);
+            VoxelApp.LOGGER.error("GitHub upload failed for identifier: {}", identifier, e);
             return "Upload failed: " + e.getMessage();
         }
     }
@@ -46,25 +55,25 @@ public class GitHubExecutor {
         return github;
     }
 
-    private static GHRepository getRepository(GitHub github) throws IOException {
-        VoxelApp.LOGGER.debug("Accessing repository: {}", REPO);
-        GHRepository repo = github.getRepository(REPO);
+    private static void getRepository(@NotNull GitHub github) throws IOException {
+        VoxelApp.LOGGER.debug("Accessing repository: {}", REPO_NAME);
+        repo = github.getRepository(REPO_NAME);
         VoxelApp.LOGGER.debug("Successfully accessed repository");
-        return repo;
     }
 
-    private static byte[] decodeBase64Pack(String base64Pack) {
+    private static byte @NotNull [] decodeBase64Pack(String base64Pack) {
         VoxelApp.LOGGER.debug("Decoding base64 pack data");
         byte[] data = Base64.getDecoder().decode(base64Pack);
         VoxelApp.LOGGER.debug("Decoded pack data (size: {} bytes)", data.length);
         return data;
     }
 
-    private static String createTagName(String mac) {
-        return "pack-" + mac.replace(":", "-");
+    @Contract(pure = true)
+    public static @NotNull String createTagName(@NotNull String identifier) {
+        return "pack-" + identifier.replace(":", "-");
     }
 
-    private static void deleteExistingReleaseIfExists(GHRepository repo, String tag) throws IOException {
+    public static void deleteExistingReleaseIfExists(String tag) throws IOException {
         try {
             GHRelease old = repo.getReleaseByTagName(tag);
             if (old != null) {
@@ -77,9 +86,9 @@ public class GitHubExecutor {
         }
     }
 
-    private static GHRelease createNewRelease(GHRepository repo, String tag, String mac) throws IOException {
+    private static @NotNull GHRelease createNewRelease(String tag, String identifier) throws IOException {
         VoxelApp.LOGGER.debug("Creating new release: {}", tag);
-        String releaseName = "Pack for " + mac;
+        String releaseName = "Pack for " + identifier;
         GHRelease release = repo.createRelease(tag)
                 .name(releaseName)
                 .prerelease(false)
@@ -88,19 +97,19 @@ public class GitHubExecutor {
         return release;
     }
 
-    private static void uploadAssetToRelease(GHRelease release, String mac, byte[] data) throws IOException {
+    private static void uploadAssetToRelease(@NotNull GHRelease release, String identifier, byte[] data) throws IOException {
         VoxelApp.LOGGER.debug("Uploading asset...");
         release.uploadAsset(
-                mac + ".zip",
+                identifier + ".zip",
                 new ByteArrayInputStream(data),
                 "application/zip"
         );
         VoxelApp.LOGGER.info("Asset uploaded successfully");
     }
 
-    private static String findAssetDownloadUrl(GHRelease release, String mac) throws IOException {
+    private static String findAssetDownloadUrl(@NotNull GHRelease release, String identifier) throws IOException {
         for (GHAsset asset : release.listAssets()) {
-            if (asset.getName().equals(mac.replace(":", ".") + ".zip")) {
+            if (asset.getName().equals(identifier.replace(":", ".") + ".zip")) {
                 String url = asset.getBrowserDownloadUrl();
                 VoxelApp.LOGGER.info("Asset download URL: {}", url);
                 return url;

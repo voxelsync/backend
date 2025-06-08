@@ -26,6 +26,7 @@ repositories {
 dependencies {
 	implementation("io.github.cdimascio:dotenv-java:3.0.0")
 	implementation("org.kohsuke:github-api:1.318")
+	implementation("org.jetbrains:annotations:24.0.1")
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")

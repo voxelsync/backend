@@ -2,6 +2,7 @@ package sync.voxel.backend.host.pack;
 
 import sync.voxel.backend.VoxelApp;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -13,6 +14,7 @@ public class PackHostManager {
     private final Set<String> availableKeys = new HashSet<>();
 
     public boolean isAdminAuthorized(String adminAuth) {
+        if(ADMIN_AUTH == null) return false;
         return ADMIN_AUTH.equals(adminAuth);
     }
 
@@ -34,22 +36,21 @@ public class PackHostManager {
         return profile != null && profile.matchesIdentifier(identifier);
     }
 
-    public boolean rotateIdentifierForHostKey(String hostKey, String oldIdentifier, String newIdentifier) {
+    public void rotateIdentifierForHostKey(String hostKey, String oldIdentifier, String newIdentifier) {
         PackProfile profile = activeProfiles.get(hostKey);
         if (profile == null) {
             VoxelApp.LOGGER.debug("Host key not found for rotation: {}", hostKey);
-            return false;
+            return;
         }
 
         if (profile.rotateIdentifier(oldIdentifier, newIdentifier)) {
             VoxelApp.LOGGER.info("Identifier rotated for {}: {} -> {}", hostKey, oldIdentifier, newIdentifier);
-            return true;
+            return;
         }
         VoxelApp.LOGGER.warn("Identifier rotation failed for {}", hostKey);
-        return false;
     }
 
-    public String handlePackUpload(String hostKey, String identifier, String base64Pack) {
+    public String uploadPacketToGitHub(String hostKey, String identifier, String base64Pack) {
         if (!activeProfiles.containsKey(hostKey)) {
             activeProfiles.put(hostKey, new PackProfile(hostKey, identifier));
             VoxelApp.LOGGER.info("Created new profile for {} -> {}", hostKey, identifier);
@@ -68,11 +69,15 @@ public class PackHostManager {
         return url;
     }
 
-    public boolean removeHostKey(String hostKey) {
+    public void removeHostKey(String hostKey) {
         PackProfile profile = activeProfiles.get(hostKey);
         activeProfiles.remove(hostKey);
         availableKeys.add(hostKey);
+        try {
+            GitHubExecutor.deleteExistingReleaseIfExists(GitHubExecutor.createTagName(profile.getCurrentIdentifier()));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         VoxelApp.LOGGER.info("Remove host key {} [{}]", hostKey, profile.getCurrentIdentifier());
-        return true;
     }
 }
